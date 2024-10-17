@@ -184,6 +184,7 @@ int main(int argc, char **argv)
             ssize_t bytes;
             int odd = 1;
             {
+                sleep(1);
                 const char msg[] = "Input strings:\n";
                 write(STDOUT_FILENO, msg, sizeof(msg));
             }
