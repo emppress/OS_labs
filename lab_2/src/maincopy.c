@@ -132,6 +132,7 @@ int main(int argc, char **argv)
         print("Pthread_mutex_destroy error\n");
         exit(EXIT_FAILURE);
     }
-    sprintf(result, "%lf%%\n", (double)success_events / count_rounds * 100);
+    sprintf(result, "%.3lf%%\n", (double)success_events / count_rounds * 100);
     print(result);
+    return 0;
 }

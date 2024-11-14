@@ -111,6 +111,7 @@ int main(int argc, char **argv)
         }
     }
     char result[100];
-    sprintf(result, "%lf%%\n", (double)success_events / count_rounds * 100);
+    sprintf(result, "%.3lf%%\n", (double)success_events / count_rounds * 100);
     print(result);
+    return 0;
 }
