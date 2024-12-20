@@ -20,20 +20,19 @@ Allocator *fallback_allocator_create(void *const memory, const size_t size)
     {
         return NULL;
     }
-    fallback_allocator *alloc = (fallback_allocator *)memory;
+    fallback_allocator *alloc = (fallback_allocator *)((char *)memory + sizeof(fallback_allocator));
     alloc->memory = memory;
-    alloc->size = size;
+    alloc->size = size - sizeof(fallback_allocator);
     return (Allocator *)alloc;
 }
 
 void fallback_allocator_destroy(Allocator *const allocator)
 {
     if (allocator == NULL)
-    {
         return;
-    }
 
-    munmap(((fallback_allocator *)allocator)->memory, ((fallback_allocator *)allocator)->size);
+    ((fallback_allocator *)allocator)->memory = NULL;
+    ((fallback_allocator *)allocator)->size = 0;
 }
 
 void *fallback_allocator_alloc(Allocator *const allocator, const size_t size)
@@ -43,7 +42,7 @@ void *fallback_allocator_alloc(Allocator *const allocator, const size_t size)
         return NULL;
     }
 
-    static size_t offset = sizeof(fallback_allocator);
+    static size_t offset = 0;
 
     if (offset + size > ((fallback_allocator *)allocator)->size)
     {
@@ -64,7 +63,7 @@ void fallback_allocator_free(Allocator *const allocator, void *const memory)
 
 int main(int argc, char *argv[])
 {
-    void *library;
+    void *library = NULL;
     if (argc == 1)
     {
         allocator_create = fallback_allocator_create;
@@ -91,15 +90,15 @@ int main(int argc, char *argv[])
         }
     }
 
-    size_t memorySize = 10000000000;
-    void *memory = mmap(NULL, memorySize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    size_t memory_size = 10000000000;
+    void *memory = mmap(NULL, memory_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (memory == MAP_FAILED)
     {
         perror("mmap failed");
         return EXIT_FAILURE;
     }
 
-    Allocator *allocator = allocator_create(memory, memorySize);
+    Allocator *allocator = allocator_create(memory, memory_size);
     if (allocator == NULL)
     {
         return EXIT_FAILURE;
@@ -155,5 +154,11 @@ int main(int argc, char *argv[])
     allocator_free(allocator, ptr4);
 
     allocator_destroy(allocator);
+    munmap(memory, memory_size);
+    if (library)
+    {
+        dlclose(library);
+        library = NULL;
+    }
     return 0;
 }

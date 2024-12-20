@@ -175,8 +175,12 @@ EXPORT void allocator_free(Allocator *const allocator, void *const memory)
 
 EXPORT void allocator_destroy(Allocator *const allocator)
 {
-    if (allocator != NULL)
-    {
-        munmap(allocator->mem_start, allocator->mem_size);
-    }
+    if (allocator == NULL)
+        return;
+
+    allocator->free_lists = NULL;
+    allocator->mem_size = 0;
+    allocator->mem_start = 0;
+    allocator->min_block_size = 0;
+    allocator->num_lists = 0;
 }

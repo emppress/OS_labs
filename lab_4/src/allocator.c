@@ -45,7 +45,9 @@ EXPORT void allocator_destroy(Allocator *const allocator)
     {
         return;
     }
-    munmap((char *)allocator->memory - sizeof(Allocator), allocator->size + sizeof(Allocator));
+    allocator->free_list_head = NULL;
+    allocator->memory = NULL;
+    allocator->size = 0;
 }
 
 // Функция для поиска свободного блока (Best-Fit)
