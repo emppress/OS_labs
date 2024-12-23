@@ -6,6 +6,8 @@
 #define EXPORT
 #endif
 
+static size_t __USED_MEMORY = 0;
+
 // Структура для представления блока
 typedef struct block_header
 {
@@ -49,7 +51,7 @@ static size_t align_to_power_of_two(size_t size)
 // Функция для инициализации аллокатора
 EXPORT Allocator *allocator_create(void *const memory, const size_t size)
 {
-    if (size < 512)
+    if (size < 512 || memory == NULL)
         return NULL;
 
     size_t min_block_size = align_to_power_of_two(sizeof(block_header) + 4);
@@ -93,6 +95,7 @@ EXPORT Allocator *allocator_create(void *const memory, const size_t size)
         {
 
             block_header *block = (block_header *)((uint8_t *)memory + current_block_start);
+            __USED_MEMORY += sizeof(block_header);
             block->size = target_block_size;
             block->next = NULL;
 
@@ -101,6 +104,8 @@ EXPORT Allocator *allocator_create(void *const memory, const size_t size)
             mem_remains -= target_block_size;         // Уменьшаем размер доступной памяти
         }
     }
+    __USED_MEMORY += usable_memory_start;
+
     return allocator;
 }
 
@@ -122,6 +127,7 @@ EXPORT void *allocator_alloc(Allocator *const allocator, const size_t _size)
     {
         block = allocator->free_lists[index];
         allocator->free_lists[index] = allocator->free_lists[index]->next;
+        __USED_MEMORY += size - sizeof(block_header);
         return (void *)((uint8_t *)block + sizeof(block_header));
     }
 
@@ -145,6 +151,9 @@ EXPORT void *allocator_alloc(Allocator *const allocator, const size_t _size)
                 block->size = split_size;
 
                 block_header *new_block = (block_header *)((uint8_t *)block + split_size);
+
+                __USED_MEMORY += sizeof(block_header);
+
                 new_block->size = split_size;
                 // Помещаем новый блок в соответствующий список
                 size_t new_block_index = get_list_index(allocator, split_size);
@@ -158,6 +167,7 @@ EXPORT void *allocator_alloc(Allocator *const allocator, const size_t _size)
     if (block == NULL)
         return NULL;
 
+    __USED_MEMORY += size - sizeof(block_header);
     return (void *)((uint8_t *)block + sizeof(block_header));
 }
 
@@ -169,8 +179,13 @@ EXPORT void allocator_free(Allocator *const allocator, void *const memory)
     block_header *block = (block_header *)((uint8_t *)memory - sizeof(block_header));
 
     size_t index = get_list_index(allocator, block->size);
+    if (index >= allocator->num_lists)
+        return;
+
     block->next = allocator->free_lists[index];
     allocator->free_lists[index] = block;
+
+    __USED_MEMORY -= block->size - sizeof(block_header);
 }
 
 EXPORT void allocator_destroy(Allocator *const allocator)
@@ -180,7 +195,12 @@ EXPORT void allocator_destroy(Allocator *const allocator)
 
     allocator->free_lists = NULL;
     allocator->mem_size = 0;
-    allocator->mem_start = 0;
+    allocator->mem_start = NULL;
     allocator->min_block_size = 0;
     allocator->num_lists = 0;
+}
+
+EXPORT size_t get_used_memory()
+{
+    return __USED_MEMORY;
 }

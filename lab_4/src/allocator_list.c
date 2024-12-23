@@ -6,14 +6,20 @@
 #define EXPORT
 #endif
 
-// Структура для представления свободного блока памяти
+#define __DEBUG 1
+
+#if __DEBUG
+static size_t __USED_MEMORY = 0;
+#endif
+
+// Структура свободного блока памяти
 typedef struct block_header
 {
     size_t size;               // Размер блока в байтах
     struct block_header *next; // Указатель на следующий свободный блок
 } block_header;
 
-// Структура для представления аллокатора
+// Структура аллокатора
 struct Allocator
 {
     block_header *free_list_head;
@@ -21,7 +27,7 @@ struct Allocator
     size_t size;
 };
 
-// 1) Функция для инициализации аллокатора
+// Функция для инициализации аллокатора
 EXPORT Allocator *allocator_create(void *const memory, const size_t size)
 {
     if (memory == NULL || size <= sizeof(Allocator) + sizeof(block_header))
@@ -29,16 +35,21 @@ EXPORT Allocator *allocator_create(void *const memory, const size_t size)
         return NULL;
     }
     Allocator *allocator = (Allocator *)memory;
-    allocator->memory = (char *)memory + sizeof(Allocator);
+    allocator->memory = (uint8_t *)memory + sizeof(Allocator);
     allocator->size = size - sizeof(Allocator);
 
     allocator->free_list_head = (block_header *)allocator->memory;
     allocator->free_list_head->size = allocator->size - sizeof(block_header);
     allocator->free_list_head->next = NULL;
+
+#if __DEBUG
+    __USED_MEMORY += sizeof(allocator) + sizeof(block_header);
+#endif
+
     return allocator;
 }
 
-// 2) Функция для деинициализации аллокатора
+// Функция для деинициализации аллокатора
 EXPORT void allocator_destroy(Allocator *const allocator)
 {
     if (allocator == NULL)
@@ -48,11 +59,18 @@ EXPORT void allocator_destroy(Allocator *const allocator)
     allocator->free_list_head = NULL;
     allocator->memory = NULL;
     allocator->size = 0;
+
+#if __DEBUG
+    __USED_MEMORY -= sizeof(allocator) + sizeof(block_header);
+#endif
 }
 
 // Функция для поиска свободного блока (Best-Fit)
 static block_header *find_free_block(Allocator *const allocator, size_t size)
 {
+    if (allocator == NULL || allocator->free_list_head == NULL)
+        return NULL;
+
     block_header *current = allocator->free_list_head;
     block_header *best_block = NULL;
     size_t minSize = __SIZE_MAX__;
@@ -69,12 +87,12 @@ static block_header *find_free_block(Allocator *const allocator, size_t size)
     return best_block;
 }
 
-// 3) Функция для выделения памяти
+// Функция для выделения памяти
 EXPORT void *allocator_alloc(Allocator *const allocator, const size_t size)
 {
     if (allocator == NULL || size <= 0)
     {
-        return NULL; // Некорректный аллокатор или размер
+        return NULL;
     }
 
     block_header *free_block = find_free_block(allocator, size);
@@ -82,13 +100,12 @@ EXPORT void *allocator_alloc(Allocator *const allocator, const size_t size)
     {
         return NULL; // Нет свободного блока подходящего размера
     }
-
-    void *allocated_address = free_block + sizeof(block_header);
+    void *allocated_address = (uint8_t *)free_block + sizeof(block_header);
     // Если блок слишком большой, разделим его
     if (free_block->size > size)
     {
         // Используем адрес начала блока для нового свободного блока
-        block_header *new_free_block = (block_header *)((char *)free_block + sizeof(block_header) + size);
+        block_header *new_free_block = (block_header *)((uint8_t *)free_block + sizeof(block_header) + size);
         new_free_block->size = free_block->size - size - sizeof(block_header);
         new_free_block->next = free_block->next;
         free_block->next = new_free_block;
@@ -110,6 +127,10 @@ EXPORT void *allocator_alloc(Allocator *const allocator, const size_t size)
                 current->next = free_block->next;
             }
         }
+
+#if __DEBUG
+        __USED_MEMORY += sizeof(block_header);
+#endif
     }
     else
     {
@@ -132,6 +153,10 @@ EXPORT void *allocator_alloc(Allocator *const allocator, const size_t size)
         }
     }
 
+#if __DEBUG
+    __USED_MEMORY += size;
+#endif
+
     return allocated_address;
 }
 
@@ -152,11 +177,15 @@ static void merge_blocks(Allocator *allocator)
 
     while (current != NULL)
     {
-        if ((char *)prev + sizeof(block_header) + prev->size == (char *)current)
+        if ((uint8_t *)prev + sizeof(block_header) + prev->size == (uint8_t *)current)
         {
             prev->size += current->size + sizeof(block_header);
             prev->next = current->next;
             current = prev->next;
+
+#if __DEBUG
+            __USED_MEMORY -= sizeof(block_header);
+#endif
         }
         else
         {
@@ -166,18 +195,16 @@ static void merge_blocks(Allocator *allocator)
     }
 }
 
-// 4) Функция для освобождения памяти
+// Функция для освобождения памяти
 EXPORT void allocator_free(Allocator *const allocator, void *const memory)
 {
     if (allocator == NULL || memory == NULL)
-    {
-        return; // Некорректный аллокатор или адрес
-    }
+        return;
 
     block_header *new_free_block = (block_header *)((char *)memory - sizeof(block_header));
 
     // Ищем куда вставить освободившийся блок в список
-    if (allocator->free_list_head == NULL || (char *)new_free_block < (char *)allocator->free_list_head)
+    if (allocator->free_list_head == NULL || (uint8_t *)new_free_block < (uint8_t *)allocator->free_list_head)
     {
         new_free_block->next = allocator->free_list_head;
         allocator->free_list_head = new_free_block;
@@ -186,7 +213,7 @@ EXPORT void allocator_free(Allocator *const allocator, void *const memory)
     {
         block_header *current = allocator->free_list_head;
         block_header *prev = NULL;
-        while (current != NULL && (char *)new_free_block > (char *)current)
+        while (current != NULL && (uint8_t *)new_free_block > (uint8_t *)current)
         {
             prev = current;
             current = current->next;
@@ -198,5 +225,17 @@ EXPORT void allocator_free(Allocator *const allocator, void *const memory)
         }
     }
 
+#if __DEBUG
+    __USED_MEMORY -= new_free_block->size;
+#endif
+
     merge_blocks(allocator);
+    block_header *tmp = allocator->free_list_head;
 }
+
+#if __DEBUG
+EXPORT size_t get_used_memory()
+{
+    return __USED_MEMORY;
+}
+#endif

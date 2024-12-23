@@ -17,5 +17,6 @@ typedef Allocator *allocator_create_f(void *const memory, const size_t size);
 typedef void allocator_destroy_f(Allocator *const allocator);
 typedef void *allocator_alloc_f(Allocator *const allocator, const size_t size);
 typedef void allocator_free_f(Allocator *const allocator, void *const memory);
+typedef size_t get_used_memory_f();
 
 #endif
